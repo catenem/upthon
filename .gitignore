@@ -1,0 +1,17 @@
+'EOF'
+# segredos e dados locais (NUNCA versionar)
+*.db
+*.session
+.env
+backend/assets/
+backend/cli_config.json
+
+# ambientes e builds
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/build/
+EOF
