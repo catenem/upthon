@@ -1,9 +1,42 @@
 
 ## Início rápido (web)
 
+### Linux Mint (Ubuntu/Debian)
+
 ```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-tk ffmpeg nodejs npm
+sudo npm install -g yarn        # opcional: sem o yarn ele usa o npm
+
+git clone https://github.com/catenem/upthon
+cd upthon
+python3 start.py
+```
+
+### Windows
+
+Instale antes (PowerShell, com o `winget` do Windows 10/11):
+
+```powershell
+winget install Git.Git
+winget install Python.Python.3.12
+winget install Gyan.FFmpeg
+winget install OpenJS.NodeJS.LTS
+npm install -g yarn             # opcional: sem o yarn ele usa o npm
+```
+
+Feche e abra o PowerShell (para o PATH atualizar) e rode:
+
+```powershell
+git clone https://github.com/catenem/upthon
+cd upthon
 python start.py
 ```
+
+No Windows o tkinter já vem com o Python. Se o `python` não for encontrado, use `py start.py`.
+Para ativar o venv à mão (usar a CLI): `venv\Scripts\activate`.
+O fluxo de Windows está descrito a partir do código (caminhos e comandos tratados para os dois sistemas),
+mas foi testado só no Linux.
 
 Abra **http://localhost:5000**. Na primeira vez ele cria o `./venv`, instala o `backend/requirements.txt`,
 instala as dependências do front e monta o build. Nas seguintes só refaz o que mudou.
