@@ -7,7 +7,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import TypedDict
 
-from app.core.config import IGNORED_COVER_NAMES, IGNORED_DIRS, IMAGE_EXTS, UPLOAD_VIDEO_EXTS
+from app.core.config import IGNORED_COVER_NAMES, IGNORED_DIRS, IMAGE_EXTS, TEMP_VIDEO_SUFFIX, UPLOAD_VIDEO_EXTS
 from app.utils.paths import strip_long_path_prefix, to_long_path
 from app.utils.text import column_letter, lead_number, natural_key
 
@@ -26,6 +26,11 @@ def is_video(path: str | Path) -> bool:
     return Path(path).suffix.lower() in UPLOAD_VIDEO_EXTS
 
 
+def is_temp_artifact(name: str) -> bool:
+    """Sobra do ffmpeg (``aula_ready.mp4``): não é conteúdo e pode sumir a qualquer momento."""
+    return str(name).lower().endswith(TEMP_VIDEO_SUFFIX)
+
+
 def scan_folder(folder_path: str | Path) -> list[QueueItem]:
     """Mapeia a pasta em: nível 1 (matéria) > subpastas > arquivos.
 
@@ -41,6 +46,8 @@ def scan_folder(folder_path: str | Path) -> list[QueueItem]:
         dirs[:] = sorted((d for d in dirs if d not in IGNORED_DIRS), key=natural_key)
         for name in sorted(files, key=natural_key):
             p = Path(name)
+            if is_temp_artifact(name):
+                continue
             if p.stem.lower() in IGNORED_COVER_NAMES and p.suffix.lower() in IMAGE_EXTS:
                 continue
 

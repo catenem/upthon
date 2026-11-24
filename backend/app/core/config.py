@@ -1,9 +1,3 @@
-"""Configuração central: caminhos, constantes e variáveis de ambiente.
-
-Tudo que antes estava espalhado (extensões de vídeo em 5 lugares, caminho fixo
-``D:\\ghost\\...`` da thumbnail, origem do CORS, nome do banco relativo ao cwd)
-vive aqui e pode ser sobrescrito por variáveis de ambiente / arquivo ``.env``.
-"""
 from __future__ import annotations
 
 import os
@@ -19,6 +13,8 @@ load_dotenv(BASE_DIR / ".env")
 # --- Extensões, separadas por finalidade -------------------------------------
 # Enviadas como vídeo (ffmpeg + thumbnail). Qualquer outra coisa vai como documento.
 UPLOAD_VIDEO_EXTS = (".mp4", ".ts", ".avi")
+# Saída temporária do ffmpeg ao lado do vídeo. Nunca é conteúdo do curso: o scanner a ignora.
+TEMP_VIDEO_SUFFIX = "_ready.mp4"
 # Extensões que recebem o atributo DocumentAttributeVideo no Telegram.
 VIDEO_ATTRIBUTE_EXTS = (".mp4", ".mov", ".mkv", ".avi")
 # Contagem na árvore de arquivos exibida no front.

@@ -20,7 +20,7 @@ from app.services.rendering import (
     render_subfolder_header,
     render_topic_index,
 )
-from app.services.scanner import QueueItem, build_tag_plan, is_video, order_queue, scan_folder
+from app.services.scanner import QueueItem, build_tag_plan, is_temp_artifact, is_video, order_queue, scan_folder
 from app.services.workers import PendingDoc, TelegramWorker, WorkerPool, send_grouped_docs
 
 _UNSET = object()
@@ -96,7 +96,13 @@ class UploadService:
 
     def _load_or_scan(self, path: str, cid: int) -> list[QueueItem]:
         if self.queue.exists(cid):
-            return self.queue.load(cid)
+            items = self.queue.load(cid)
+            kept = [i for i in items if not is_temp_artifact(i.get("file_name") or i.get("full_path") or "")]
+            if len(kept) != len(items):
+                # filas criadas antes continham sobras do ffmpeg (_ready.mp4) que somem durante o envio
+                logging.warning("Removidas %d sobras de conversão (_ready.mp4) da fila.", len(items) - len(kept))
+                self.queue.save(cid, kept)
+            return kept
         scanned = scan_folder(path)
         self.queue.save(cid, scanned)
         return scanned

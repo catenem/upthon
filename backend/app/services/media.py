@@ -12,10 +12,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from telethon import types
+from telethon import errors, types
 from telethon.tl import functions
 
-from app.core.config import THUMBNAIL_NAMES, VIDEO_HEIGHT, VIDEO_WIDTH
+from app.core.config import TEMP_VIDEO_SUFFIX, THUMBNAIL_NAMES, VIDEO_HEIGHT, VIDEO_WIDTH
 from app.utils.paths import clean_path, to_long_path
 
 _THUMB_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -129,7 +129,7 @@ def _converted_sibling(video_path: str) -> str | None:
     src = Path(video_path)
     if src.suffix.lower() == ".mp4":
         return None
-    for candidate in (src.with_name(src.stem + "_ready.mp4"), src.with_suffix(".mp4")):
+    for candidate in (src.with_name(src.stem + TEMP_VIDEO_SUFFIX), src.with_suffix(".mp4")):
         if candidate.is_file():
             return str(candidate)
     return None
@@ -138,11 +138,12 @@ def _converted_sibling(video_path: str) -> str | None:
 def _optimize_video_sync(input_path: str, intro_thumb: str | None) -> dict | None:
     """Prepende 1s da thumbnail e reencoda em 720p. ATENÇÃO: substitui o arquivo original."""
     src = to_long_path(Path(input_path).resolve())
-    if "_ready.mp4" in str(src):
+    if str(src).lower().endswith(TEMP_VIDEO_SUFFIX):
         return None
 
     duration = 1.0
     final_path: Path | None = None
+    temp_output = src.with_name(src.stem + TEMP_VIDEO_SUFFIX)
     try:
         probe = json.loads(
             subprocess.check_output(
@@ -152,7 +153,6 @@ def _optimize_video_sync(input_path: str, intro_thumb: str | None) -> dict | Non
         duration = float(probe["format"]["duration"])
         has_audio = any(s.get("codec_type") == "audio" for s in probe.get("streams", []))
 
-        temp_output = src.with_name(src.stem + "_ready.mp4")
         subprocess.run(
             _build_ffmpeg_cmd(src, str(intro_thumb), temp_output, has_audio),
             stdout=subprocess.DEVNULL,
@@ -186,6 +186,12 @@ def _optimize_video_sync(input_path: str, intro_thumb: str | None) -> dict | Non
         }
     except Exception as exc:
         logging.error("Erro no FFmpeg: %s", exc)
+        if final_path is None:
+            # ffmpeg falhou no meio: não deixa um _ready.mp4 incompleto ao lado do vídeo
+            try:
+                temp_output.unlink(missing_ok=True)
+            except OSError:
+                pass
         return {
             "duration": max(1, int(duration)),
             "width": VIDEO_WIDTH,
@@ -289,6 +295,22 @@ async def _prepare_video(
     return PreparedVideo(path=str(final_path), thumb=thumb, duration=int(duration))
 
 
+# --- erros 500 do Telegram ---------------------------------------------------------
+RETRY_DELAYS = (3, 10, 30)   # segundos entre tentativas (alterado nos testes)
+
+
+async def with_server_retry(call, what: str):
+    """Repete a chamada em erros 500 do Telegram (ex.: STORAGE_CHOOSE_VOLUME_*), que são passageiros."""
+    for attempt, delay in enumerate((*RETRY_DELAYS, None)):
+        try:
+            return await call()
+        except errors.ServerError as exc:
+            if delay is None:
+                raise
+            logging.warning("Telegram com erro interno (%s) em %s; nova tentativa em %ss.", exc, what, delay)
+            await asyncio.sleep(delay)
+
+
 # --- upload paralelo ------------------------------------------------------------
 def _read_part(path: str, offset: int, size: int) -> bytes:
     with open(path, "rb") as fh:
@@ -316,11 +338,10 @@ async def fast_upload(client, file_path: str, workers: int = 8):
     async def upload_part(index: int) -> None:
         async with pool:
             data = await asyncio.to_thread(_read_part, file_path, index * part_size, part_size)
-            await client(
-                functions.upload.SaveBigFilePartRequest(
-                    file_id=file_id, file_part=index, file_total_parts=part_count, bytes=data
-                )
+            request = functions.upload.SaveBigFilePartRequest(
+                file_id=file_id, file_part=index, file_total_parts=part_count, bytes=data
             )
+            await with_server_retry(lambda: client(request), f"parte {index + 1}/{part_count}")
 
     await asyncio.gather(*(upload_part(i) for i in range(part_count)))
     return types.InputFileBig(id=file_id, parts=part_count, name=os.path.basename(file_path))

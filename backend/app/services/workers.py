@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,11 @@ class TelegramWorker:
     ) -> SendResult:
         try:
             prepared = await media.prepare_video(video_path, thumbnail, self.default_thumbnail)
+            if prepared is not None and not os.path.isfile(prepared.path):
+                # o preparo em cache apontava para um arquivo que sumiu: refaz uma vez
+                logging.warning("Arquivo preparado sumiu (%s); preparando de novo.", prepared.path)
+                media.forget_prepared(video_path)
+                prepared = await media.prepare_video(video_path, thumbnail, self.default_thumbnail)
             if prepared is None:
                 return FAILED
 
@@ -84,14 +90,17 @@ class TelegramWorker:
                         supports_streaming=True,
                     )
                 ]
-            await self.client.send_file(
-                chat_id,
-                file=prepared.path,
-                thumb=prepared.thumb,
-                caption=build_caption(tag, clean_path(video_path)),
-                parse_mode="html",
-                reply_to=reply_to,
-                attributes=attributes,
+            await media.with_server_retry(
+                lambda: self.client.send_file(
+                    chat_id,
+                    file=prepared.path,
+                    thumb=prepared.thumb,
+                    caption=build_caption(tag, clean_path(video_path)),
+                    parse_mode="html",
+                    reply_to=reply_to,
+                    attributes=attributes,
+                ),
+                "envio do vídeo",
             )
             return OK
         except errors.FloodWaitError as exc:
