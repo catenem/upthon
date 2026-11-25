@@ -85,7 +85,8 @@ class UploadService:
             # A fila já tem tópicos: o canal é um fórum, mesmo que quem retomou tenha esquecido de avisar.
             logging.info("Fila com tópicos detectada: retomando como supergrupo com tópicos.")
             is_topics = True
-        if not await self.channels.ensure_access(workers, cid):
+        workers = await self.channels.ensure_access(workers, cid)
+        if not workers:
             return
 
         run = _UploadRun(self, workers, cid, order_queue(items), is_topics)
